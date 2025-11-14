@@ -13,18 +13,20 @@ import (
 )
 
 type (
-	datap struct {
-		original uintptr
-		buffer   uintptr
-		length   uint32
-		size     uint32
+	// Datap represents a data parser for Beacon data
+	Datap struct {
+		Original uintptr
+		Buffer   uintptr
+		Length   uint32
+		Size     uint32
 	}
 
-	formatp struct {
-		original uintptr
-		buffer   uintptr
-		length   uint32
-		size     uint32
+	// Formatp represents a format buffer for Beacon output
+	Formatp struct {
+		Original uintptr
+		Buffer   uintptr
+		Length   uint32
+		Size     uint32
 	}
 )
 
@@ -138,8 +140,8 @@ func GetElfPrintfForChannel(channel chan<- interface{}) func(int, uintptr, uintp
 }
 
 // FormatPrintfFunc implements BeaconFormatPrintf
-func FormatPrintfFunc(format *formatp, fmtPtr uintptr, arg0 uintptr, arg1 uintptr, arg2 uintptr, arg3 uintptr, arg4 uintptr, arg5 uintptr, arg6 uintptr, arg7 uintptr, arg8 uintptr, arg9 uintptr) uintptr {
-	if format == nil || format.original == 0 || fmtPtr == 0 {
+func FormatPrintfFunc(format *Formatp, fmtPtr uintptr, arg0 uintptr, arg1 uintptr, arg2 uintptr, arg3 uintptr, arg4 uintptr, arg5 uintptr, arg6 uintptr, arg7 uintptr, arg8 uintptr, arg9 uintptr) uintptr {
+	if format == nil || format.Original == 0 || fmtPtr == 0 {
 		return 0
 	}
 
@@ -152,78 +154,78 @@ func FormatPrintfFunc(format *formatp, fmtPtr uintptr, arg0 uintptr, arg1 uintpt
 	result := parsePrintfFormat(fmtStr, args)
 
 	resultLen := uint32(len(result))
-	if format.length+resultLen > format.size {
+	if format.Length+resultLen > format.Size {
 		return 0
 	}
 
 	resultBytes := []byte(result)
 	for i := uint32(0); i < resultLen; i++ {
-		*(*byte)(unsafe.Pointer(format.buffer + uintptr(i))) = resultBytes[i]
+		*(*byte)(unsafe.Pointer(format.Buffer + uintptr(i))) = resultBytes[i]
 	}
 
-	format.buffer += uintptr(resultLen)
-	format.length += resultLen
+	format.Buffer += uintptr(resultLen)
+	format.Length += resultLen
 	return 0
 }
 
 // DataExtract implements BeaconDataExtract
-func DataExtract(datap *datap, size *uint32) uintptr {
-	if datap.length <= 0 {
+func DataExtract(datap *Datap, size *uint32) uintptr {
+	if datap.Length <= 0 {
 		return 0
 	}
 
-	binaryLength := *(*uint32)(unsafe.Pointer(datap.buffer))
-	datap.buffer += uintptr(4)
-	datap.length -= 4
-	if datap.length < binaryLength {
+	binaryLength := *(*uint32)(unsafe.Pointer(datap.Buffer))
+	datap.Buffer += uintptr(4)
+	datap.Length -= 4
+	if datap.Length < binaryLength {
 		return 0
 	}
 
 	out := make([]byte, binaryLength)
-	memory.MemCpy(uintptr(unsafe.Pointer(&out[0])), datap.buffer, binaryLength)
+	memory.MemCpy(uintptr(unsafe.Pointer(&out[0])), datap.Buffer, binaryLength)
 	if uintptr(unsafe.Pointer(size)) != uintptr(0) && binaryLength != 0 {
 		*size = binaryLength
 	}
 
-	datap.buffer += uintptr(binaryLength)
-	datap.length -= binaryLength
+	datap.Buffer += uintptr(binaryLength)
+	datap.Length -= binaryLength
 	return uintptr(unsafe.Pointer(&out[0]))
 }
 
 // DataParse implements BeaconDataParse
-func DataParse(datap *datap, buff uintptr, size uint32) uintptr {
+func DataParse(datap *Datap, buff uintptr, size uint32) uintptr {
 	if size <= 0 {
 		return 0
 	}
-	datap.original = buff
-	datap.buffer = buff + uintptr(4)
-	datap.length = size - 4
-	datap.size = size - 4
+	datap.Original = buff
+	datap.Buffer = buff + uintptr(4)
+	datap.Length = size - 4
+	datap.Size = size - 4
 	return 1
 }
 
 // DataInt implements BeaconDataInt
-func DataInt(datap *datap) uintptr {
-	value := memory.ReadUIntFromPtr(datap.buffer)
-	datap.buffer += uintptr(4)
-	datap.length -= 4
+func DataInt(datap *Datap) uintptr {
+	value := memory.ReadUIntFromPtr(datap.Buffer)
+	datap.Buffer += uintptr(4)
+	datap.Length -= 4
 	return uintptr(value)
 }
 
 // DataLength implements BeaconDataLength
-func DataLength(datap *datap) uintptr {
-	return uintptr(datap.length)
+func DataLength(datap *Datap) uintptr {
+	return uintptr(datap.Length)
 }
 
 // DataShort implements BeaconDataShort
-func DataShort(datap *datap) uintptr {
-	if datap.length < 2 {
+func DataShort(datap *Datap) uintptr {
+	if datap.Length < 2 {
 		return 0
 	}
 
-	value := memory.ReadShortFromPtr(datap.buffer)
-	datap.buffer += uintptr(2)
-	datap.length -= 2
+	value := memory.ReadShortFromPtr(datap.Buffer)
+	datap.Buffer += uintptr(2)
+	datap.Length -= 2
 	return uintptr(value)
 }
 
@@ -256,7 +258,7 @@ func RemoveValue(key uintptr) uintptr {
 }
 
 // FormatAllocate implements BeaconFormatAlloc
-func FormatAllocate(format *formatp, maxsz uint32) uintptr {
+func FormatAllocate(format *Formatp, maxsz uint32) uintptr {
 	if format == nil {
 		return 0
 	}
@@ -267,63 +269,63 @@ func FormatAllocate(format *formatp, maxsz uint32) uintptr {
 		return 0
 	}
 
-	format.original = ptr
-	format.buffer = ptr
-	format.length = 0
-	format.size = maxsz
+	format.Original = ptr
+	format.Buffer = ptr
+	format.Length = 0
+	format.Size = maxsz
 
 	return 0
 }
 
 // FormatReset implements BeaconFormatReset
-func FormatReset(format *formatp) uintptr {
-	if format == nil || format.original == 0 {
+func FormatReset(format *Formatp) uintptr {
+	if format == nil || format.Original == 0 {
 		return 0
 	}
 
-	memory.MemSet(format.original, 0, format.size)
-	format.buffer = format.original
-	format.length = format.size
+	memory.MemSet(format.Original, 0, format.Size)
+	format.Buffer = format.Original
+	format.Length = format.Size
 
 	return 0
 }
 
 // FormatAppend implements BeaconFormatAppend
-func FormatAppend(format *formatp, text uintptr, len uint32) uintptr {
+func FormatAppend(format *Formatp, text uintptr, len uint32) uintptr {
 	if format == nil || len <= 0 || text == 0 {
 		return 0
 	}
 
-	available := format.size - format.length
+	available := format.Size - format.Length
 	if len > available {
 		len = available
 	}
 
-	memory.MemCpy(format.buffer, text, len)
-	format.buffer += uintptr(len)
-	format.length += len
+	memory.MemCpy(format.Buffer, text, len)
+	format.Buffer += uintptr(len)
+	format.Length += len
 
 	return 0
 }
 
 // FormatFree implements BeaconFormatFree
-func FormatFree(format *formatp) uintptr {
-	if format == nil || format.original == 0 {
+func FormatFree(format *Formatp) uintptr {
+	if format == nil || format.Original == 0 {
 		return 0
 	}
 
 	// Unmap memory on Linux
-	syscall.Syscall(syscall.SYS_MUNMAP, format.original, uintptr(format.size), 0)
-	format.original = 0
-	format.buffer = 0
-	format.length = 0
-	format.size = 0
+	syscall.Syscall(syscall.SYS_MUNMAP, format.Original, uintptr(format.Size), 0)
+	format.Original = 0
+	format.Buffer = 0
+	format.Length = 0
+	format.Size = 0
 
 	return 0
 }
 
 // FormatInt implements BeaconFormatInt
-func FormatInt(format *formatp, value int32) uintptr {
+func FormatInt(format *Formatp, value int32) uintptr {
 	if format == nil {
 		return 0
 	}
@@ -332,31 +334,31 @@ func FormatInt(format *formatp, value int32) uintptr {
 	valueBytes := []byte(valueStr)
 	valueLen := uint32(len(valueBytes))
 
-	if format.length+valueLen > format.size {
+	if format.Length+valueLen > format.Size {
 		return 0
 	}
 
 	for i := uint32(0); i < valueLen; i++ {
-		*(*byte)(unsafe.Pointer(format.buffer + uintptr(i))) = valueBytes[i]
+		*(*byte)(unsafe.Pointer(format.Buffer + uintptr(i))) = valueBytes[i]
 	}
 
-	format.buffer += uintptr(valueLen)
-	format.length += valueLen
+	format.Buffer += uintptr(valueLen)
+	format.Length += valueLen
 	return 0
 }
 
 // FormatToString implements BeaconFormatToString
-func FormatToString(format *formatp, buffer uintptr, maxsz uint32) uintptr {
+func FormatToString(format *Formatp, buffer uintptr, maxsz uint32) uintptr {
 	if format == nil || buffer == 0 {
 		return 0
 	}
 
-	copyLen := format.length
+	copyLen := format.Length
 	if copyLen > maxsz {
 		copyLen = maxsz
 	}
 
-	memory.MemCpy(buffer, format.original, copyLen)
+	memory.MemCpy(buffer, format.Original, copyLen)
 	return uintptr(copyLen)
 }
 

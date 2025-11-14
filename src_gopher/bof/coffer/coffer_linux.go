@@ -10,8 +10,6 @@ import (
 	"runtime/debug"
 	"syscall"
 	"unsafe"
-
-	"gopher/bof/boffer"
 )
 
 // X86_64 ELF relocation types
@@ -51,65 +49,15 @@ var trampolineOffset = 2 // Offset where address is written
 
 // resolveExternalAddress resolves external symbols, especially Beacon API functions
 func resolveExternalAddress(symbolName string, outChannel chan<- interface{}) uintptr {
-	// Handle Beacon API functions
-	switch symbolName {
-	case "BeaconOutput":
-		return getBeaconFunctionPointer(boffer.GetElfOutputForChannel(outChannel))
-	case "BeaconDataParse":
-		return getBeaconFunctionPointer(boffer.DataParse)
-	case "BeaconDataInt":
-		return getBeaconFunctionPointer(boffer.DataInt)
-	case "BeaconDataShort":
-		return getBeaconFunctionPointer(boffer.DataShort)
-	case "BeaconDataLength":
-		return getBeaconFunctionPointer(boffer.DataLength)
-	case "BeaconDataExtract":
-		return getBeaconFunctionPointer(boffer.DataExtract)
-	case "BeaconPrintf":
-		return getBeaconFunctionPointer(boffer.GetElfPrintfForChannel(outChannel))
-	case "BeaconAddValue":
-		return getBeaconFunctionPointer(boffer.AddValue)
-	case "BeaconGetValue":
-		return getBeaconFunctionPointer(boffer.GetValue)
-	case "BeaconRemoveValue":
-		return getBeaconFunctionPointer(boffer.RemoveValue)
-	case "BeaconFormatAlloc":
-		return getBeaconFunctionPointer(boffer.FormatAllocate)
-	case "BeaconFormatReset":
-		return getBeaconFunctionPointer(boffer.FormatReset)
-	case "BeaconFormatAppend":
-		return getBeaconFunctionPointer(boffer.FormatAppend)
-	case "BeaconFormatFree":
-		return getBeaconFunctionPointer(boffer.FormatFree)
-	case "BeaconFormatInt":
-		return getBeaconFunctionPointer(boffer.FormatInt)
-	case "BeaconFormatPrintf":
-		return getBeaconFunctionPointer(boffer.FormatPrintfFunc)
-	case "BeaconFormatToString":
-		return getBeaconFunctionPointer(boffer.FormatToString)
-	case "AxAddScreenshot":
-		return getBeaconFunctionPointer(boffer.AxAddScreenshot(outChannel))
-	case "AxDownloadMemory":
-		return getBeaconFunctionPointer(boffer.AxDownloadMemory(outChannel))
-	default:
-		// Try to resolve from system libraries using dlopen/dlsym
-		return resolveSystemSymbol(symbolName)
+	// First check internal Beacon API functions with CGO function pointers
+	for _, fn := range GetInternalFunctions() {
+		if fn.Name == symbolName {
+			return fn.Ptr
+		}
 	}
-}
 
-// getBeaconFunctionPointer gets function pointer for Beacon API functions
-// This is a wrapper that uses reflect to get Go function addresses
-func getBeaconFunctionPointer(fn interface{}) uintptr {
-	if fn == nil {
-		return 0
-	}
-	// Use reflect to get function address
-	// Note: This gets the Go function pointer which may need trampoline for C calls
-	fnValue := reflect.ValueOf(fn)
-	if fnValue.Kind() != reflect.Func {
-		return 0
-	}
-	return fnValue.Pointer()
+	// Try to resolve from system libraries using dlopen/dlsym
+	return resolveSystemSymbol(symbolName)
 }
 
 // mmapAllocate allocates executable memory using mmap
@@ -328,6 +276,10 @@ func LoadWithMethod(elfBytes []byte, argBytes []byte, method string) ([]utils.Bo
 	if err := processRelocations(loadedElf, output); err != nil {
 		return nil, fmt.Errorf("failed to process relocations: %v", err)
 	}
+
+	// Set the output channel for CGO exported Beacon API functions
+	SetOutputChannel(output)
+	defer ClearOutputChannel()
 
 	// Call the entry point
 	go invokeMethod(method, argBytes, loadedElf, output)
