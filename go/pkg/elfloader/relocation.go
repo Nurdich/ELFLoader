@@ -110,44 +110,60 @@ func processRela64(info *ELFInfo, data []byte, targetSectionIndex int, targetAdd
 		}
 		sym := info.SymbolTable[symIndex]
 
-		// Resolve symbol address
-		symAddr, err := resolveSymbol(info, &sym)
-		if err != nil {
-			return fmt.Errorf("failed to resolve symbol %s: %v", sym.Name, err)
-		}
-
 		// Apply relocation
 		relocAddr := targetAddr + uintptr(rOffset)
 
-		switch relType {
-		case R_X86_64_64:
-			// Direct 64-bit
-			value := uint64(symAddr) + uint64(rAddend)
-			writeUint64At(relocAddr, 0, value)
+		// Check if symbol is undefined (external symbol)
+		if sym.Section == elf.SHN_UNDEF {
+			// External symbol - need to create thunk trampoline
+			symAddr, err := lookupExternalSymbol(sym.Name)
+			if err != nil {
+				return fmt.Errorf("failed to resolve external symbol %s: %v", sym.Name, err)
+			}
 
-		case R_X86_64_PC32, R_X86_64_PLT32:
-			// PC-relative 32-bit
-			value := int32(int64(symAddr) + rAddend - int64(relocAddr))
+			// Create thunk trampoline
+			thunkAddr, err := createThunkTrampoline(info, symAddr)
+			if err != nil {
+				return fmt.Errorf("failed to create thunk for %s: %v", sym.Name, err)
+			}
+
+			// Calculate PC-relative offset to thunk
+			value := int32(int64(thunkAddr) - int64(relocAddr) + rAddend)
 			writeInt32At(relocAddr, 0, value)
+		} else {
+			// Internal symbol - resolve normally
+			symAddr := info.SectionMappings[sym.Section] + uintptr(sym.Value)
 
-		case R_X86_64_GOTPCREL, R_X86_64_GOTPCRELX, R_X86_64_REX_GOTPCRELX:
-			// GOT-relative PC-relative 32-bit
-			// For object files without GOT, treat like PC-relative
-			value := int32(int64(symAddr) + rAddend - int64(relocAddr))
-			writeInt32At(relocAddr, 0, value)
+			switch relType {
+			case R_X86_64_64:
+				// Direct 64-bit
+				value := uint64(symAddr) + uint64(rAddend)
+				writeUint64At(relocAddr, 0, value)
 
-		case R_X86_64_32:
-			// Direct 32-bit zero extended
-			value := uint32(uint64(symAddr) + uint64(rAddend))
-			writeUint32At(relocAddr, 0, value)
+			case R_X86_64_PC32, R_X86_64_PLT32:
+				// PC-relative 32-bit
+				value := int32(int64(symAddr) + rAddend - int64(relocAddr))
+				writeInt32At(relocAddr, 0, value)
 
-		case R_X86_64_32S:
-			// Direct 32-bit sign extended
-			value := int32(int64(symAddr) + rAddend)
-			writeInt32At(relocAddr, 0, value)
+			case R_X86_64_GOTPCREL, R_X86_64_GOTPCRELX, R_X86_64_REX_GOTPCRELX:
+				// GOT-relative PC-relative 32-bit
+				// For object files without GOT, treat like PC-relative
+				value := int32(int64(symAddr) + rAddend - int64(relocAddr))
+				writeInt32At(relocAddr, 0, value)
 
-		default:
-			return fmt.Errorf("unsupported relocation type: %d", relType)
+			case R_X86_64_32:
+				// Direct 32-bit zero extended
+				value := uint32(uint64(symAddr) + uint64(rAddend))
+				writeUint32At(relocAddr, 0, value)
+
+			case R_X86_64_32S:
+				// Direct 32-bit sign extended
+				value := int32(int64(symAddr) + rAddend)
+				writeInt32At(relocAddr, 0, value)
+
+			default:
+				return fmt.Errorf("unsupported relocation type: %d", relType)
+			}
 		}
 	}
 	return nil

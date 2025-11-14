@@ -6,14 +6,78 @@ import (
 	"plugin"
 	"runtime"
 	"unsafe"
-
-	"github.com/Nurdich/ELFLoader/pkg/beacon"
 )
 
 /*
 #cgo LDFLAGS: -ldl
 #include <dlfcn.h>
 #include <stdlib.h>
+#include <stdint.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+
+// Forward declarations for Go CGO exports
+extern void GoBeaconPrintf(int type, char* message);
+extern void GoBeaconFormatPrintf(void* format, char* message);
+extern void BeaconDataParse(void* parser, unsigned char* buffer, int size);
+extern int BeaconDataInt(void* parser);
+extern short BeaconDataShort(void* parser);
+extern int BeaconDataLength(void* parser);
+extern unsigned char* BeaconDataExtract(void* parser, int* outsize);
+extern void BeaconFormatAlloc(void* format, int maxsz);
+extern void BeaconFormatReset(void* format);
+extern void BeaconFormatFree(void* format);
+extern void BeaconFormatAppend(void* format, unsigned char* text, int len);
+extern unsigned char* BeaconFormatToString(void* format, int* outsize);
+extern void BeaconFormatInt(void* format, int value);
+extern void BeaconOutput(int type, unsigned char* data, int len);
+extern int BeaconIsAdmin(void);
+extern char** getEnviron(void);
+extern char* getOSName(void);
+
+// Variadic wrappers for BeaconPrintf and BeaconFormatPrintf
+// These must NOT be static or inline so they have real addresses in the binary
+void BeaconPrintf_wrapper(int type, const char* fmt, ...) {
+    char buffer[8192];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buffer, sizeof(buffer), fmt, args);
+    va_end(args);
+    GoBeaconPrintf(type, buffer);
+}
+
+void BeaconFormatPrintf_wrapper(void* format, const char* fmt, ...) {
+    char buffer[8192];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buffer, sizeof(buffer), fmt, args);
+    va_end(args);
+    GoBeaconFormatPrintf(format, buffer);
+}
+
+// For compatibility, redirect to the wrapper functions
+#define BeaconPrintf BeaconPrintf_wrapper
+#define BeaconFormatPrintf BeaconFormatPrintf_wrapper
+
+// Helper functions to get function pointers
+static inline void* get_BeaconPrintf_ptr() { return (void*)BeaconPrintf; }
+static inline void* get_BeaconDataParse_ptr() { return (void*)BeaconDataParse; }
+static inline void* get_BeaconDataInt_ptr() { return (void*)BeaconDataInt; }
+static inline void* get_BeaconDataShort_ptr() { return (void*)BeaconDataShort; }
+static inline void* get_BeaconDataLength_ptr() { return (void*)BeaconDataLength; }
+static inline void* get_BeaconDataExtract_ptr() { return (void*)BeaconDataExtract; }
+static inline void* get_BeaconFormatAlloc_ptr() { return (void*)BeaconFormatAlloc; }
+static inline void* get_BeaconFormatReset_ptr() { return (void*)BeaconFormatReset; }
+static inline void* get_BeaconFormatFree_ptr() { return (void*)BeaconFormatFree; }
+static inline void* get_BeaconFormatAppend_ptr() { return (void*)BeaconFormatAppend; }
+static inline void* get_BeaconFormatPrintf_ptr() { return (void*)BeaconFormatPrintf; }
+static inline void* get_BeaconFormatToString_ptr() { return (void*)BeaconFormatToString; }
+static inline void* get_BeaconFormatInt_ptr() { return (void*)BeaconFormatInt; }
+static inline void* get_BeaconOutput_ptr() { return (void*)BeaconOutput; }
+static inline void* get_BeaconIsAdmin_ptr() { return (void*)BeaconIsAdmin; }
+static inline void* get_getEnviron_ptr() { return (void*)getEnviron; }
+static inline void* get_getOSName_ptr() { return (void*)getOSName; }
 */
 import "C"
 
@@ -25,24 +89,26 @@ type InternalFunction struct {
 
 // GetInternalFunctions returns the list of internal Beacon API functions
 func GetInternalFunctions() []InternalFunction {
+	// Get addresses of CGO-exported functions using C function pointers
+	// This ensures we get the correct absolute addresses
 	return []InternalFunction{
-		{"BeaconDataParse", getFuncAddr(beacon.BeaconDataParse)},
-		{"BeaconDataInt", getFuncAddr(beacon.BeaconDataInt)},
-		{"BeaconDataShort", getFuncAddr(beacon.BeaconDataShort)},
-		{"BeaconDataLength", getFuncAddr(beacon.BeaconDataLength)},
-		{"BeaconDataExtract", getFuncAddr(beacon.BeaconDataExtract)},
-		{"BeaconFormatAlloc", getFuncAddr(beacon.BeaconFormatAlloc)},
-		{"BeaconFormatReset", getFuncAddr(beacon.BeaconFormatReset)},
-		{"BeaconFormatFree", getFuncAddr(beacon.BeaconFormatFree)},
-		{"BeaconFormatAppend", getFuncAddr(beacon.BeaconFormatAppend)},
-		{"BeaconFormatPrintf", getFuncAddr(beacon.BeaconFormatPrintf)},
-		{"BeaconFormatToString", getFuncAddr(beacon.BeaconFormatToString)},
-		{"BeaconFormatInt", getFuncAddr(beacon.BeaconFormatInt)},
-		{"BeaconPrintf", getFuncAddr(beacon.BeaconPrintf)},
-		{"BeaconOutput", getFuncAddr(beacon.BeaconOutput)},
-		{"BeaconIsAdmin", getFuncAddr(beacon.BeaconIsAdmin)},
-		{"getEnviron", getFuncAddr(beacon.GetEnviron)},
-		{"getOSName", getFuncAddr(beacon.GetOSName)},
+		{"BeaconDataParse", uintptr(C.get_BeaconDataParse_ptr())},
+		{"BeaconDataInt", uintptr(C.get_BeaconDataInt_ptr())},
+		{"BeaconDataShort", uintptr(C.get_BeaconDataShort_ptr())},
+		{"BeaconDataLength", uintptr(C.get_BeaconDataLength_ptr())},
+		{"BeaconDataExtract", uintptr(C.get_BeaconDataExtract_ptr())},
+		{"BeaconFormatAlloc", uintptr(C.get_BeaconFormatAlloc_ptr())},
+		{"BeaconFormatReset", uintptr(C.get_BeaconFormatReset_ptr())},
+		{"BeaconFormatFree", uintptr(C.get_BeaconFormatFree_ptr())},
+		{"BeaconFormatAppend", uintptr(C.get_BeaconFormatAppend_ptr())},
+		{"BeaconFormatPrintf", uintptr(C.get_BeaconFormatPrintf_ptr())},
+		{"BeaconFormatToString", uintptr(C.get_BeaconFormatToString_ptr())},
+		{"BeaconFormatInt", uintptr(C.get_BeaconFormatInt_ptr())},
+		{"BeaconPrintf", uintptr(C.get_BeaconPrintf_ptr())},
+		{"BeaconOutput", uintptr(C.get_BeaconOutput_ptr())},
+		{"BeaconIsAdmin", uintptr(C.get_BeaconIsAdmin_ptr())},
+		{"getEnviron", uintptr(C.get_getEnviron_ptr())},
+		{"getOSName", uintptr(C.get_getOSName_ptr())},
 	}
 }
 
@@ -143,13 +209,6 @@ func createThunkTrampoline(info *ELFInfo, targetAddr uintptr) (uintptr, error) {
 	return thunkAddr, nil
 }
 
-// Helper function to get the address of a Go function
-// Note: This is a simplified version and may not work for all function types
-func getFuncAddr(fn interface{}) uintptr {
-	// This is a placeholder - getting function addresses in Go is tricky
-	// For actual implementation, we would need to export these via CGO
-	return 0
-}
 
 // writeUint32ToBytes writes a uint32 to a byte slice in little-endian
 func writeUint32ToBytes(data []byte, value uint32) {
