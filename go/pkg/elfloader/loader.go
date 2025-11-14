@@ -139,7 +139,7 @@ func ELFRunner(functionName string, elfObjectData []byte, argumentData []byte) e
 		return err
 	}
 
-	// Execute the function
+	// Execute the function (implemented in executor.go with CGO)
 	executeFunction(funcPtr, argumentData, len(argumentData))
 
 	return nil
@@ -271,26 +271,6 @@ func cleanupSections(info *ELFInfo) {
 	}
 }
 
-// executeFunction executes the loaded function
-// NOTE: This is a simplified implementation for demonstration purposes.
-// Actual execution of dynamically loaded code requires careful handling
-// of calling conventions and may need CGO or assembly implementation.
-func executeFunction(funcPtr uintptr, args []byte, argsLen int) {
-	// For now, we just print information about the loaded function
-	// A complete implementation would require:
-	// 1. CGO wrapper to call C functions
-	// 2. Assembly trampoline with correct calling convention
-	// 3. Proper stack frame setup
-
-	fmt.Printf("Function loaded at address: 0x%x\n", funcPtr)
-	fmt.Printf("Arguments: %d bytes\n", argsLen)
-
-	// TODO: Implement actual execution using CGO or assembly
-	// For demonstration, we're skipping execution to avoid crashes
-	fmt.Println("Note: Execution of loaded code is not yet implemented in pure Go.")
-	fmt.Println("      For actual execution, use the C version or implement CGO wrapper.")
-}
-
 // Helper functions for memory operations
 
 func copyToAddr(addr uintptr, data []byte) {
@@ -310,6 +290,11 @@ func readInt32At(addr uintptr, offset int) int32 {
 
 func writeUint64At(addr uintptr, offset int, value uint64) {
 	ptr := (*uint64)(unsafe.Pointer(addr + uintptr(offset)))
+	*ptr = value
+}
+
+func writeUint32At(addr uintptr, offset int, value uint32) {
+	ptr := (*uint32)(unsafe.Pointer(addr + uintptr(offset)))
 	*ptr = value
 }
 
@@ -388,5 +373,3 @@ func (r *bytesReaderAt) ReadAt(p []byte, off int64) (n int, err error) {
 	}
 	return
 }
-
-// Removed init function to avoid issues during package initialization

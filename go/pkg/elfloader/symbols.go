@@ -48,6 +48,13 @@ func GetInternalFunctions() []InternalFunction {
 
 // resolveSymbol resolves a symbol to its address
 func resolveSymbol(info *ELFInfo, sym *elf.Symbol) (uintptr, error) {
+	// Handle special symbols
+	if sym.Name == "_GLOBAL_OFFSET_TABLE_" || sym.Name == "_DYNAMIC" {
+		// These are special linker symbols that are not needed for object files
+		// Return a dummy address
+		return uintptr(0), nil
+	}
+
 	// If symbol is in a section, calculate its address
 	if sym.Section != elf.SHN_UNDEF {
 		if int(sym.Section) >= len(info.SectionMappings) {

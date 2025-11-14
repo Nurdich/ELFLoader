@@ -14,9 +14,16 @@ const (
 
 // Relocation types for x86_64
 const (
-	R_X86_64_64   = 1
-	R_X86_64_PC32 = 2
-	R_X86_64_PLT32 = 4
+	R_X86_64_64           = 1
+	R_X86_64_PC32         = 2
+	R_X86_64_GOT32        = 3
+	R_X86_64_PLT32        = 4
+	R_X86_64_GOTPCREL     = 9
+	R_X86_64_32           = 10
+	R_X86_64_32S          = 11
+	R_X86_64_PC64         = 24
+	R_X86_64_GOTPCRELX    = 41
+	R_X86_64_REX_GOTPCRELX = 42
 )
 
 // processRelocations processes all relocation sections
@@ -121,6 +128,22 @@ func processRela64(info *ELFInfo, data []byte, targetSectionIndex int, targetAdd
 		case R_X86_64_PC32, R_X86_64_PLT32:
 			// PC-relative 32-bit
 			value := int32(int64(symAddr) + rAddend - int64(relocAddr))
+			writeInt32At(relocAddr, 0, value)
+
+		case R_X86_64_GOTPCREL, R_X86_64_GOTPCRELX, R_X86_64_REX_GOTPCRELX:
+			// GOT-relative PC-relative 32-bit
+			// For object files without GOT, treat like PC-relative
+			value := int32(int64(symAddr) + rAddend - int64(relocAddr))
+			writeInt32At(relocAddr, 0, value)
+
+		case R_X86_64_32:
+			// Direct 32-bit zero extended
+			value := uint32(uint64(symAddr) + uint64(rAddend))
+			writeUint32At(relocAddr, 0, value)
+
+		case R_X86_64_32S:
+			// Direct 32-bit sign extended
+			value := int32(int64(symAddr) + rAddend)
 			writeInt32At(relocAddr, 0, value)
 
 		default:
