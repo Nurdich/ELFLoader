@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Nurdich/ELFLoader/pkg/beacon"
 	"github.com/Nurdich/ELFLoader/pkg/elfloader"
 )
 
@@ -36,17 +35,22 @@ func main() {
 		}
 	}
 
-	// Run the ELF object file
-	// The function name "go" is the default entry point used by the C version
-	err = elfloader.ELFRunner("go", elfData, argumentData)
+	// Run the ELF object file using the C implementation
+	// The function name "go" is the default entry point
+	fmt.Println("Loading ELF with C implementation...")
+	err = elfloader.ELFRunnerC("go", elfData, argumentData)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error running ELF file: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Get and print the output
-	output, outputLen := beacon.BeaconGetOutputData()
-	if outputLen > 0 {
-		fmt.Printf("Output data: %s\n", string(output))
+	// Get and print the output from BeaconPrintf calls
+	output, size := elfloader.GetBeaconOutput()
+	if size > 0 {
+		fmt.Println("\n--- Beacon Output ---")
+		fmt.Print(string(output))
+		fmt.Println("--- End Output ---")
 	}
+
+	fmt.Println("ELF execution completed successfully")
 }

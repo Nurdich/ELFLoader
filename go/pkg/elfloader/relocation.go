@@ -115,21 +115,64 @@ func processRela64(info *ELFInfo, data []byte, targetSectionIndex int, targetAdd
 
 		// Check if symbol is undefined (external symbol)
 		if sym.Section == elf.SHN_UNDEF {
-			// External symbol - need to create thunk trampoline
+			// Handle special linker symbols (don't create thunks for these)
+			if sym.Name == "_GLOBAL_OFFSET_TABLE_" || sym.Name == "_DYNAMIC" {
+				// For object files, these symbols can be ignored or set to 0
+				// Skip this relocation
+				continue
+			}
+
+			// External symbol - resolve it
 			symAddr, err := lookupExternalSymbol(sym.Name)
 			if err != nil {
 				return fmt.Errorf("failed to resolve external symbol %s: %v", sym.Name, err)
 			}
 
-			// Create thunk trampoline
-			thunkAddr, err := createThunkTrampoline(info, symAddr)
-			if err != nil {
-				return fmt.Errorf("failed to create thunk for %s: %v", sym.Name, err)
-			}
+			// Handle based on relocation type
+			switch relType {
+			case R_X86_64_PLT32:
+				// Function call - create thunk trampoline
+				thunkAddr, err := createThunkTrampoline(info, symAddr)
+				if err != nil {
+					return fmt.Errorf("failed to create thunk for %s: %v", sym.Name, err)
+				}
+				value := int32(int64(thunkAddr) - int64(relocAddr) + rAddend)
+				writeInt32At(relocAddr, 0, value)
 
-			// Calculate PC-relative offset to thunk
-			value := int32(int64(thunkAddr) - int64(relocAddr) + rAddend)
-			writeInt32At(relocAddr, 0, value)
+			case R_X86_64_GOTPCREL, R_X86_64_GOTPCRELX, R_X86_64_REX_GOTPCRELX:
+				// GOT-relative - for object files, resolve directly
+				// These are often used for global variables
+				value := int32(int64(symAddr) + rAddend - int64(relocAddr))
+				writeInt32At(relocAddr, 0, value)
+
+			case R_X86_64_PC32:
+				// PC-relative 32-bit - can be function or data
+				// Create thunk for safety
+				thunkAddr, err := createThunkTrampoline(info, symAddr)
+				if err != nil {
+					return fmt.Errorf("failed to create thunk for %s: %v", sym.Name, err)
+				}
+				value := int32(int64(thunkAddr) - int64(relocAddr) + rAddend)
+				writeInt32At(relocAddr, 0, value)
+
+			case R_X86_64_64:
+				// Direct 64-bit address
+				value := uint64(symAddr) + uint64(rAddend)
+				writeUint64At(relocAddr, 0, value)
+
+			case R_X86_64_32:
+				// Direct 32-bit zero extended
+				value := uint32(uint64(symAddr) + uint64(rAddend))
+				writeUint32At(relocAddr, 0, value)
+
+			case R_X86_64_32S:
+				// Direct 32-bit sign extended
+				value := int32(int64(symAddr) + rAddend)
+				writeInt32At(relocAddr, 0, value)
+
+			default:
+				return fmt.Errorf("unsupported relocation type for external symbol: %d", relType)
+			}
 		} else {
 			// Internal symbol - resolve normally
 			symAddr := info.SectionMappings[sym.Section] + uintptr(sym.Value)
