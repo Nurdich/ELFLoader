@@ -334,6 +334,12 @@ func processRelocations(loadedElf *LoadedElf, output chan<- interface{}) error {
 		}
 	}
 
+	// IMPORTANT: Go's elf.Symbols() skips the first NULL symbol (index 0),
+	// but relocation entries use the original symbol table indices.
+	// We need to prepend a NULL symbol to maintain correct indexing.
+	nullSym := elf.Symbol{Name: "", Info: 0, Other: 0, Section: elf.SHN_UNDEF, Value: 0, Size: 0}
+	symbols = append([]elf.Symbol{nullSym}, symbols...)
+
 	// Process RELA sections (relocations with addend)
 	for _, section := range loadedElf.File.Sections {
 		if section.Type != elf.SHT_RELA {
