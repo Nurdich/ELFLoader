@@ -1,2 +1,7 @@
 *.o
 *.out
+
+# Go compiled binaries
+src_gopher/gopher
+go/elfloader
+go/main
