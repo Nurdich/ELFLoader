@@ -136,6 +136,13 @@ func resolveSymbol(info *ELFInfo, sym *elf.Symbol) (uintptr, error) {
 
 // lookupExternalSymbol looks up an external symbol (libc or internal)
 func lookupExternalSymbol(name string) (uintptr, error) {
+	// Handle special linker symbols
+	if name == "_GLOBAL_OFFSET_TABLE_" || name == "_DYNAMIC" {
+		// These are special linker symbols - return a dummy address
+		// For object files, these don't need actual values
+		return uintptr(0x1000), nil // Use non-zero to avoid null pointer issues
+	}
+
 	// First check internal functions
 	for _, fn := range GetInternalFunctions() {
 		if fn.Name == name {
