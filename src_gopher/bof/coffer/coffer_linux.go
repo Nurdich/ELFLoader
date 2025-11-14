@@ -192,11 +192,7 @@ func LoadWithMethod(elfBytes []byte, argBytes []byte, method string) ([]utils.Bo
 		return nil, fmt.Errorf("failed to allocate trampoline table: %v", err)
 	}
 	loadedElf.TrampolineTable = trampolineTable
-
-	// Set trampoline table to executable
-	if err := mprotect(trampolineTable, trampolineTableSize, syscall.PROT_READ|syscall.PROT_EXEC); err != nil {
-		return nil, fmt.Errorf("failed to set trampoline table executable: %v", err)
-	}
+	// Note: trampoline table protection will be set to RX after relocations are processed
 
 	// Find base address (first LOAD segment)
 	var baseAddr uintptr = 0
@@ -252,7 +248,26 @@ func LoadWithMethod(elfBytes []byte, argBytes []byte, method string) ([]utils.Bo
 			}
 		}
 
-		// Set memory protection based on section flags
+		// Store section info (memory protection will be set after relocations)
+		loadedElf.Sections[section.Name] = ElfSection{
+			Section: section,
+			Address: addr,
+			Size:    section.Size,
+		}
+	}
+
+	// Process relocations (sections are still writable at this point)
+	if err := processRelocations(loadedElf, output); err != nil {
+		return nil, fmt.Errorf("failed to process relocations: %v", err)
+	}
+
+	// Now set final memory protections for all sections
+	for _, elfSection := range loadedElf.Sections {
+		section := elfSection.Section
+		addr := elfSection.Address
+		size := elfSection.Size
+
+		// Determine section protections based on section flags
 		prot := syscall.PROT_READ
 		if section.Flags&elf.SHF_WRITE != 0 {
 			prot |= syscall.PROT_WRITE
@@ -261,20 +276,14 @@ func LoadWithMethod(elfBytes []byte, argBytes []byte, method string) ([]utils.Bo
 			prot |= syscall.PROT_EXEC
 		}
 
-		if err := mprotect(addr, size, prot); err != nil {
+		if err := mprotect(addr, uintptr(size), prot); err != nil {
 			return nil, fmt.Errorf("failed to set memory protection for section %s: %v", section.Name, err)
-		}
-
-		loadedElf.Sections[section.Name] = ElfSection{
-			Section: section,
-			Address: addr,
-			Size:    section.Size,
 		}
 	}
 
-	// Process relocations
-	if err := processRelocations(loadedElf, output); err != nil {
-		return nil, fmt.Errorf("failed to process relocations: %v", err)
+	// Set trampoline table to read+execute now that relocations are done
+	if err := mprotect(trampolineTable, trampolineTableSize, syscall.PROT_READ|syscall.PROT_EXEC); err != nil {
+		return nil, fmt.Errorf("failed to set trampoline table executable: %v", err)
 	}
 
 	// Set the output channel for CGO exported Beacon API functions
